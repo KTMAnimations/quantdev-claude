@@ -11,9 +11,9 @@
     "build:web": "cd apps/web && npm run build",
     "start": "npm run start:web",
     "start:web": "cd apps/web && npm run start",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:build": "docker-compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build",
     "db:push": "cd apps/web && npx prisma db push",
     "db:migrate": "cd apps/web && npx prisma migrate dev",
     "db:studio": "cd apps/web && npx prisma studio"

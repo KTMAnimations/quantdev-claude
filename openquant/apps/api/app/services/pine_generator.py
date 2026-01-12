@@ -145,6 +145,9 @@ fill(p1, p2, color=color.new(color.blue, 90))
     def _generate_custom_code(self, description: str, script_type: str) -> str:
         """Generate custom Pine Script code"""
         declaration = "strategy" if script_type == "strategy" else "indicator"
+        comment = "// Execute trades" if script_type == "strategy" else "// Signals"
+        long_action = 'strategy.entry("Long", strategy.long)' if script_type == "strategy" else 'label.new(bar_index, low, "BUY", color=color.green)'
+        short_action = 'strategy.entry("Short", strategy.short)' if script_type == "strategy" else 'label.new(bar_index, high, "SELL", color=color.red)'
 
         return f'''
 //@version=5
@@ -163,11 +166,11 @@ value = ta.sma(close, length)
 longCondition = ta.crossover(close, value)
 shortCondition = ta.crossunder(close, value)
 
-{"// Execute trades" if script_type == "strategy" else "// Signals"}
+{comment}
 if longCondition
-    {"strategy.entry(\"Long\", strategy.long)" if script_type == "strategy" else "label.new(bar_index, low, \"BUY\", color=color.green)"}
+    {long_action}
 if shortCondition
-    {"strategy.entry(\"Short\", strategy.short)" if script_type == "strategy" else "label.new(bar_index, high, \"SELL\", color=color.red)"}
+    {short_action}
 
 // Plot
 plot(value, "Signal", color.purple)

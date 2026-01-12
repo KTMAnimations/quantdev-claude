@@ -1,0 +1,35 @@
+{
+  "name": "openquant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenQuant - Your AI Quant Dev. Open-source quantitative trading platform.",
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload",
+    "build": "npm run build:web",
+    "build:web": "cd apps/web && npm run build",
+    "start": "npm run start:web",
+    "start:web": "cd apps/web && npm run start",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:build": "docker-compose build",
+    "db:push": "cd apps/web && npx prisma db push",
+    "db:migrate": "cd apps/web && npx prisma migrate dev",
+    "db:studio": "cd apps/web && npx prisma studio"
+  },
+  "keywords": [
+    "quantitative-trading",
+    "trading-strategies",
+    "pine-script",
+    "monte-carlo",
+    "backtesting",
+    "prop-firm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

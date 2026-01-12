@@ -1,0 +1,142 @@
+// Prisma schema for OpenQuant
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  strategies    Strategy[]
+  backtests     Backtest[]
+  ideations     Ideation[]
+  subscriptions Subscription[]
+}
+
+model Strategy {
+  id          String       @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  pineCode    String       @db.Text
+  type        StrategyType @default(STRATEGY)
+  isPublic    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  backtests Backtest[]
+
+  @@index([userId])
+}
+
+enum StrategyType {
+  STRATEGY
+  INDICATOR
+}
+
+model Backtest {
+  id             String   @id @default(cuid())
+  userId         String
+  strategyId     String?
+  name           String
+  symbol         String
+  timeframe      String
+  startDate      DateTime
+  endDate        DateTime
+  initialCapital Float
+
+  // Results
+  totalReturn  Float
+  sharpeRatio  Float?
+  maxDrawdown  Float
+  winRate      Float
+  profitFactor Float?
+  totalTrades  Int
+
+  // Raw data
+  tradesJson      Json // Array of trade objects
+  equityCurveJson Json // Array of equity points
+
+  // Monte Carlo results
+  monteCarloJson Json?
+
+  createdAt DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy? @relation(fields: [strategyId], references: [id])
+
+  @@index([userId])
+  @@index([strategyId])
+}
+
+model Ideation {
+  id                 String  @id @default(cuid())
+  userId             String
+  featureDescription String  @db.Text
+  symbol             String
+  timeframe          String
+
+  // Results
+  icMean             Float?
+  icIr               Float?
+  pValue             Float?
+  isSignificant      Boolean?
+  mlAccuracy         Float?
+  hasPredictivePower Boolean?
+
+  // Full results
+  resultsJson Json?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  stripeCustomerId       String?            @unique
+  stripeSubscriptionId   String?            @unique
+  stripePriceId          String?
+  stripeCurrentPeriodEnd DateTime?
+  status                 SubscriptionStatus @default(INACTIVE)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model StrategyLibrary {
+  id           String   @id @default(cuid())
+  name         String
+  description  String   @db.Text
+  category     String
+  pineCode     String   @db.Text
+  author       String?
+  votes        Int      @default(0)
+  downloads    Int      @default(0)
+  isInfluencer Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

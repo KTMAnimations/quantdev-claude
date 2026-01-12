@@ -1,0 +1,32 @@
+# FastAPI and web
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+httpx>=0.25.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+redis>=5.0.0
+alembic>=1.12.0
+
+# Data Science / Quant
+pandas>=2.1.0
+numpy>=1.24.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+statsmodels>=0.14.0
+
+# Trading / Finance
+yfinance>=0.2.31
+ta-lib>=0.4.28
+vectorbt>=0.25.0
+
+# ML / AI
+openai>=1.3.0
+chromadb>=0.4.18
+shap>=0.43.0
+
+# Utilities
+pydantic>=2.5.0
+python-dotenv>=1.0.0

@@ -12,6 +12,9 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Ensure optional public/ exists (COPY in runner stage expects it)
+RUN mkdir -p public
+
 # Build the application
 RUN npm run build
 

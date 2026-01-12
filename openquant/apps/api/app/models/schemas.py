@@ -44,8 +44,16 @@ class ConfidenceIntervals(BaseModel):
     probability_positive: float
 
 
+class ParsedFeatureLogic(BaseModel):
+    type: str
+    confidence: float
+    source: str  # "llm" or "pattern"
+    # Additional parameters are dynamic based on feature type
+
+
 class EdgeAnalysisResponse(BaseModel):
     feature_name: str
+    parsed_logic: Optional[Dict[str, Any]] = None
     statistical_significance: StatisticalSignificance
     ml_importance: MLImportance
     confidence_intervals: ConfidenceIntervals

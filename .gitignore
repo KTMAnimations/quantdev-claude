@@ -1,0 +1,57 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+**/build/
+**/.turbo/
+**/.parcel-cache/
+.npm/
+.yarn/
+.pnp.*
+
+# TypeScript
+**/*.tsbuildinfo
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/site-packages/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables (keep examples)
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+
+# Local databases / Prisma
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Tooling / misc
+.claude/

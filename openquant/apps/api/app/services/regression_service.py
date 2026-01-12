@@ -18,6 +18,11 @@ class RegressionService:
         if not trades:
             return self._empty_result()
 
+        # Regression outputs are not meaningful (or numerically stable) with very small samples.
+        # SciPy's normaltest also requires n >= 8.
+        if len(trades) < 8:
+            return self._empty_result()
+
         # Extract returns
         returns = np.array([t.get("return_pct", 0) for t in trades])
 
@@ -45,15 +50,29 @@ class RegressionService:
         r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
 
         # Adjusted R-squared
-        adj_r_squared = 1 - (1 - r_squared) * (n - 1) / (n - X.shape[1] - 1)
+        denom = (n - X.shape[1] - 1)
+        adj_r_squared = (
+            1 - (1 - r_squared) * (n - 1) / denom
+            if denom > 0
+            else float(r_squared)
+        )
 
         # Calculate p-values (simplified)
         feature_names = list(feature_data.keys())
         factors = []
         for i, name in enumerate(feature_names):
             coef = coeffs[i + 1]
-            t_stat = coef / (np.std(returns) / np.sqrt(n))
-            p_value = 2 * (1 - stats.t.cdf(abs(t_stat), n - X.shape[1]))
+            denom = (np.std(returns) / np.sqrt(n))
+            df = n - X.shape[1]
+
+            if denom == 0 or not np.isfinite(denom) or df <= 0:
+                t_stat = 0.0
+                p_value = 1.0
+            else:
+                t_stat = coef / denom
+                p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df))
+                if not np.isfinite(p_value):
+                    p_value = 1.0
 
             significance = "***" if p_value < 0.01 else "**" if p_value < 0.05 else "*" if p_value < 0.1 else ""
 
@@ -66,11 +85,12 @@ class RegressionService:
 
         # Durbin-Watson test
         residuals_fit = returns - X @ coeffs
-        dw = np.sum(np.diff(residuals_fit) ** 2) / np.sum(residuals_fit ** 2)
+        denom = np.sum(residuals_fit ** 2)
+        dw = (np.sum(np.diff(residuals_fit) ** 2) / denom) if denom > 0 else 0.0
 
         # Normality test
         _, normality_p = stats.normaltest(residuals_fit)
-        residuals_normal = normality_p > 0.05
+        residuals_normal = bool(normality_p > 0.05) if np.isfinite(normality_p) else False
 
         return {
             "r_squared": float(r_squared),

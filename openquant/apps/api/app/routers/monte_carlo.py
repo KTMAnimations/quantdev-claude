@@ -3,11 +3,10 @@ Monte Carlo Simulation API Router
 """
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import MonteCarloRequest, MonteCarloResponse
-from app.services.monte_carlo_service import MonteCarloService
+from app.services.monte_carlo_service import MonteCarloService, MonteCarloConfig
 import pandas as pd
 
 router = APIRouter()
-mc_service = MonteCarloService()
 
 
 @router.post("/analyze", response_model=MonteCarloResponse)
@@ -24,6 +23,9 @@ async def run_monte_carlo(request: MonteCarloRequest):
             (1 + trades_df["return_pct"]).cumprod()
         )
 
+        mc_service = MonteCarloService(
+            MonteCarloConfig(n_simulations=request.n_simulations)
+        )
         result = await mc_service.run_full_analysis(
             trades=trades_df,
             equity_curve=equity_curve

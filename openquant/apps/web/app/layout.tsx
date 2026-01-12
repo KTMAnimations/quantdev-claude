@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "OpenQuant - Your AI Quant Dev",
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className="min-h-screen bg-background-primary text-text-primary antialiased">
         {children}
+        <Toaster theme="dark" richColors closeButton />
       </body>
     </html>
   );

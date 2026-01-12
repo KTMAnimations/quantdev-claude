@@ -4,16 +4,7 @@ Prop Firm Challenge Simulator - Monte Carlo simulation of prop firm pass rates
 import numpy as np
 from typing import Dict, List, Optional
 from dataclasses import dataclass
-from enum import Enum
-
-
-class PropFirmType(Enum):
-    FTMO = "ftmo"
-    THE5ERS = "the5ers"
-    APEX = "apex"
-    TOPSTEP = "topstep"
-    MFF = "mff"
-    E8 = "e8"
+from app.models.schemas import PropFirmType
 
 
 @dataclass
@@ -98,7 +89,13 @@ class PropFirmSimulator:
         custom_rules: Optional[PropFirmRules] = None
     ) -> Dict:
         """Run Monte Carlo simulation of prop firm challenge"""
-        rules = custom_rules or PROP_FIRM_CONFIGS[prop_firm]
+        if custom_rules:
+            rules = custom_rules
+        else:
+            try:
+                rules = PROP_FIRM_CONFIGS[prop_firm]
+            except KeyError as e:
+                raise ValueError(f"Unsupported prop firm: {prop_firm}") from e
 
         results = {
             "prop_firm": rules.name,

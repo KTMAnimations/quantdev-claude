@@ -1,10 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
-import Editor, { OnMount } from "@monaco-editor/react";
-import { editor } from "monaco-editor";
+import dynamic from "next/dynamic";
+import React, { useRef, useState } from "react";
+import type { EditorProps, OnMount } from "@monaco-editor/react";
+import type { editor } from "monaco-editor";
 import { Button } from "@/components/ui/button";
 import { Copy, Download, Wand2, AlertCircle, CheckCircle } from "lucide-react";
+import { toast } from "sonner";
+
+const MonacoEditor = dynamic<EditorProps>(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center text-text-muted">
+      Loading editor...
+    </div>
+  ),
+});
 
 // Pine Script language definition
 const PINE_LANGUAGE_DEF = {
@@ -45,85 +56,119 @@ export function PineScriptEditor({
   validationErrors = []
 }: PineScriptEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const monacoConfiguredRef = useRef(false);
   const [description, setDescription] = useState("");
 
   const handleEditorDidMount: OnMount = (editorInstance, monaco) => {
     editorRef.current = editorInstance;
 
-    // Register Pine Script language
-    monaco.languages.register({ id: "pinescript" });
+    if (!monacoConfiguredRef.current) {
+      try {
+        const isRegistered = monaco.languages
+          .getLanguages()
+          .some((lang: { id: string }) => lang.id === "pinescript");
 
-    // Set tokenizer
-    monaco.languages.setMonarchTokensProvider("pinescript", {
-      keywords: PINE_LANGUAGE_DEF.keywords,
-      typeKeywords: PINE_LANGUAGE_DEF.typeKeywords,
-      operators: PINE_LANGUAGE_DEF.operators,
+        if (!isRegistered) {
+          monaco.languages.register({ id: "pinescript" });
+        }
 
-      tokenizer: {
-        root: [
-          [/\/\/.*$/, "comment"],
-          [/\/\*/, "comment", "@comment"],
-          [/"([^"\\]|\\.)*$/, "string.invalid"],
-          [/"/, "string", "@string"],
-          [/'[^']*'/, "string"],
-          [/\d+\.?\d*/, "number"],
-          [/#[0-9a-fA-F]{6,8}/, "color"],
-          [
-            /[a-zA-Z_]\w*/,
-            {
-              cases: {
-                "@keywords": "keyword",
-                "@typeKeywords": "type",
-                "@default": "identifier"
-              }
-            }
+        monaco.languages.setMonarchTokensProvider("pinescript", {
+          keywords: PINE_LANGUAGE_DEF.keywords,
+          typeKeywords: PINE_LANGUAGE_DEF.typeKeywords,
+          builtins: PINE_LANGUAGE_DEF.builtins,
+          operators: PINE_LANGUAGE_DEF.operators,
+
+          tokenizer: {
+            root: [
+              [/\/\/.*$/, "comment"],
+              [/\/\*/, "comment", "@comment"],
+              [/"([^"\\]|\\.)*$/, "string.invalid"],
+              [/"/, "string", "@string"],
+              [/'[^']*'/, "string"],
+              [/\d+\.?\d*/, "number"],
+              [/#[0-9a-fA-F]{6,8}/, "color"],
+              [
+                /[a-zA-Z_]\w*/,
+                {
+                  cases: {
+                    "@keywords": "keyword",
+                    "@typeKeywords": "type",
+                    "@builtins": "builtin",
+                    "@default": "identifier",
+                  },
+                },
+              ],
+              [/[{}()\[\]]/, "@brackets"],
+              [/[<>](?!@operators)/, "@brackets"],
+              [
+                /@operators/,
+                {
+                  cases: {
+                    "@operators": "operator",
+                    "@default": "",
+                  },
+                },
+              ],
+            ],
+            comment: [
+              [/[^\/*]+/, "comment"],
+              [/\*\//, "comment", "@pop"],
+              [/[\/*]/, "comment"],
+            ],
+            string: [
+              [/[^\\"]+/, "string"],
+              [/\\./, "string.escape"],
+              [/"/, "string", "@pop"],
+            ],
+          },
+        });
+
+        monaco.editor.defineTheme("pine-dark", {
+          base: "vs-dark",
+          inherit: true,
+          rules: [
+            { token: "comment", foreground: "6A9955" },
+            { token: "keyword", foreground: "C586C0" },
+            { token: "type", foreground: "4EC9B0" },
+            { token: "builtin", foreground: "DCDCAA" },
+            { token: "string", foreground: "CE9178" },
+            { token: "number", foreground: "B5CEA8" },
+            { token: "operator", foreground: "D4D4D4" },
+            { token: "color", foreground: "9CDCFE" },
+            { token: "identifier", foreground: "9CDCFE" },
           ],
-          [/[{}()\[\]]/, "@brackets"],
-          [/[<>](?!@operators)/, "@brackets"],
-        ],
-        comment: [
-          [/[^\/*]+/, "comment"],
-          [/\*\//, "comment", "@pop"],
-          [/[\/*]/, "comment"]
-        ],
-        string: [
-          [/[^\\"]+/, "string"],
-          [/\\./, "string.escape"],
-          [/"/, "string", "@pop"]
-        ]
-      }
-    });
+          colors: {
+            "editor.background": "#111118",
+            "editor.foreground": "#D4D4D4",
+            "editor.lineHighlightBackground": "#1e1e2a",
+            "editorCursor.foreground": "#8b5cf6",
+            "editor.selectionBackground": "#264f78",
+            "editorLineNumber.foreground": "#5A5A5A",
+          },
+        });
 
-    // Define dark theme for Pine Script
-    monaco.editor.defineTheme("pine-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6A9955" },
-        { token: "keyword", foreground: "C586C0" },
-        { token: "type", foreground: "4EC9B0" },
-        { token: "builtin", foreground: "DCDCAA" },
-        { token: "string", foreground: "CE9178" },
-        { token: "number", foreground: "B5CEA8" },
-        { token: "operator", foreground: "D4D4D4" },
-        { token: "color", foreground: "9CDCFE" },
-        { token: "identifier", foreground: "9CDCFE" }
-      ],
-      colors: {
-        "editor.background": "#111118",
-        "editor.foreground": "#D4D4D4",
-        "editor.lineHighlightBackground": "#1e1e2a",
-        "editorCursor.foreground": "#8b5cf6",
-        "editor.selectionBackground": "#264f78",
-        "editorLineNumber.foreground": "#5A5A5A"
+        monacoConfiguredRef.current = true;
+      } catch (err) {
+        console.error("Monaco setup error:", err);
+        toast.error("Editor failed to initialize. Falling back to basic editor.");
       }
-    });
+    }
 
-    monaco.editor.setTheme("pine-dark");
+    try {
+      monaco.editor.setTheme("pine-dark");
+    } catch (err) {
+      console.error("Monaco theme error:", err);
+    }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(value);
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Copied to clipboard!");
+    } catch (err) {
+      console.error("Clipboard copy failed:", err);
+      toast.error("Copy failed. Your browser may block clipboard access.");
+    }
   };
 
   const downloadFile = () => {
@@ -134,7 +179,17 @@ export function PineScriptEditor({
     a.download = "strategy.pine";
     a.click();
     URL.revokeObjectURL(url);
+    toast.success("Downloaded strategy.pine");
   };
+
+  const fallbackEditor = (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full h-full resize-none bg-background-tertiary text-text-primary font-mono text-sm p-4 outline-none"
+      spellCheck={false}
+    />
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -187,24 +242,26 @@ export function PineScriptEditor({
 
       {/* Editor */}
       <div className="flex-1">
-        <Editor
-          height="100%"
-          language="pinescript"
-          value={value}
-          onChange={(val) => onChange(val || "")}
-          onMount={handleEditorDidMount}
-          options={{
-            fontSize: 14,
-            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-            lineNumbers: "on",
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            tabSize: 4,
-            wordWrap: "on",
-            padding: { top: 16, bottom: 16 }
-          }}
-        />
+        <EditorErrorBoundary fallback={fallbackEditor}>
+          <MonacoEditor
+            height="100%"
+            language="pinescript"
+            value={value}
+            onChange={(val) => onChange(val || "")}
+            onMount={handleEditorDidMount}
+            options={{
+              fontSize: 14,
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              lineNumbers: "on",
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              tabSize: 4,
+              wordWrap: "on",
+              padding: { top: 16, bottom: 16 },
+            }}
+          />
+        </EditorErrorBoundary>
       </div>
 
       {/* Error Panel */}
@@ -220,4 +277,24 @@ export function PineScriptEditor({
       )}
     </div>
   );
+}
+
+class EditorErrorBoundary extends React.Component<
+  { fallback: React.ReactNode; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Editor crashed:", error);
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
 }

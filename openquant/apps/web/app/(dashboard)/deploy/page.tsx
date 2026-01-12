@@ -4,8 +4,12 @@ import { useState } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Rocket, DollarSign, Target, AlertTriangle, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
+import { useStrategyStore } from "@/lib/strategyStore";
+import { generateSampleTrades, tradesToDailyReturns } from "@/lib/trades";
 
 const PROP_FIRMS = [
   { id: "ftmo", name: "FTMO", cost: 540, accountSize: 100000, profitSplit: 80 },
@@ -43,45 +47,50 @@ interface SimulationResult {
 }
 
 export default function DeployPage() {
+  const trades = useStrategyStore((s) => s.trades);
+  const setTrades = useStrategyStore((s) => s.setTrades);
+
   const [selectedFirm, setSelectedFirm] = useState("ftmo");
   const [isSimulating, setIsSimulating] = useState(false);
   const [result, setResult] = useState<SimulationResult | null>(null);
+  const [nSimulations, setNSimulations] = useState(2000);
 
   const handleSimulate = async () => {
     setIsSimulating(true);
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    try {
+      const daily_returns_raw = tradesToDailyReturns(trades);
+      if (daily_returns_raw.length === 0) {
+        throw new Error("No trades loaded. Upload backtest CSV in Test first.");
+      }
 
-    const firm = PROP_FIRMS.find((f) => f.id === selectedFirm)!;
+      let daily_returns = daily_returns_raw;
+      if (daily_returns.length < 60) {
+        daily_returns = Array.from({ length: 60 }, (_, i) => daily_returns[i % daily_returns.length]);
+      }
 
-    setResult({
-      prop_firm: firm.name,
-      combined_pass_rate: 0.34,
-      phase1: {
-        pass_rate: 0.42,
-        fail_reasons: {
-          daily_drawdown: 0.28,
-          total_drawdown: 0.22,
-          time_expired: 0.08,
-        },
-        avg_days_to_pass: 18,
-      },
-      expected_value: {
-        expected_value: 2450,
-        roi: 4.5,
-        break_even_pass_rate: 0.12,
-        recommendation: {
-          verdict: "RECOMMENDED",
-          color: "green",
-          description: "Positive expected value. Worth attempting with proper risk management.",
-        },
-      },
-      funded_simulation: {
-        survival_rate: 0.72,
-        expected_monthly_profit: 3200,
-      },
-    });
+      const resp = await fetch("/api/prop-firm/simulate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          daily_returns,
+          prop_firm: selectedFirm,
+          n_simulations: nSimulations,
+        }),
+      });
 
-    setIsSimulating(false);
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.error || data?.detail || "Prop firm simulation failed");
+      }
+
+      setResult(data as SimulationResult);
+      toast.success("Prop firm simulation complete");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Prop firm simulation failed");
+    } finally {
+      setIsSimulating(false);
+    }
   };
 
   const getVerdictColor = (color: string) => {
@@ -116,6 +125,23 @@ export default function DeployPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="text-sm text-text-muted">
+                  Using {trades.length} trades (daily returns derived from exits)
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const sample = generateSampleTrades();
+                    setTrades(sample);
+                    setResult(null);
+                    toast.success("Loaded sample trades");
+                  }}
+                >
+                  Use Sample Trades
+                </Button>
+              </div>
+
               <Tabs value={selectedFirm} onValueChange={setSelectedFirm}>
                 <TabsList className="grid grid-cols-4 w-full">
                   {PROP_FIRMS.map((firm) => (
@@ -150,10 +176,21 @@ export default function DeployPage() {
                 ))}
               </Tabs>
 
-              <div className="flex justify-end mt-6">
+              <div className="flex items-center justify-between mt-6 gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-text-muted">Simulations</span>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={50000}
+                    value={nSimulations}
+                    onChange={(e) => setNSimulations(Number(e.target.value) || 0)}
+                    className="w-32 bg-background-tertiary border-border-primary"
+                  />
+                </div>
                 <Button
                   onClick={handleSimulate}
-                  disabled={isSimulating}
+                  disabled={isSimulating || trades.length === 0 || nSimulations <= 0}
                   className="bg-accent-gradient"
                 >
                   {isSimulating ? (

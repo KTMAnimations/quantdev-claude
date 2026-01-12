@@ -22,6 +22,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+## Tests (API)
+
+```bash
+cd openquant/apps/api
+pip install -r requirements-dev.txt
+pytest
+```
+
 If `npm`/Next.js has issues on very new Node versions, use Node 20.x.
 
 ## Run (Docker Compose)

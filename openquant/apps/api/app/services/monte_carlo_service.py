@@ -54,7 +54,22 @@ class MonteCarloService:
         # 7. Summary statistics
         results["summary"] = self._generate_summary(results, trades)
 
-        return results
+        return self._to_python_types(results)
+
+    @staticmethod
+    def _to_python_types(obj):
+        """Recursively convert numpy scalars/arrays to JSON-serializable Python types."""
+        if isinstance(obj, dict):
+            return {k: MonteCarloService._to_python_types(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [MonteCarloService._to_python_types(v) for v in obj]
+        if isinstance(obj, np.ndarray):
+            return MonteCarloService._to_python_types(obj.tolist())
+        if isinstance(obj, (np.floating, np.integer)):
+            return obj.item()
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        return obj
 
     def _shuffle_trades_mc(self, trades: pd.DataFrame) -> Dict:
         """Monte Carlo by shuffling trade order"""
@@ -192,7 +207,7 @@ class MonteCarloService:
                 "percentiles": self._calculate_percentiles(random_strategy_returns)
             },
             "p_value": float(p_value),
-            "is_significant": p_value < 0.05,
+            "is_significant": bool(p_value < 0.05),
             "edge_percentile": float(
                 stats.percentileofscore(random_strategy_returns, original_expectancy)
             ) if random_strategy_returns else 50.0

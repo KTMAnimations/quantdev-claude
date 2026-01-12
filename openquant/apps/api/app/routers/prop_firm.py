@@ -7,7 +7,6 @@ from app.services.prop_firm_simulator import PropFirmSimulator
 import numpy as np
 
 router = APIRouter()
-prop_service = PropFirmSimulator()
 
 
 @router.post("/simulate", response_model=PropFirmResponse)
@@ -17,11 +16,14 @@ async def simulate_prop_firm(request: PropFirmRequest):
     """
     try:
         daily_returns = np.array(request.daily_returns)
+        prop_service = PropFirmSimulator(n_simulations=request.n_simulations)
         result = await prop_service.simulate_challenge(
             daily_returns=daily_returns,
             prop_firm=request.prop_firm,
         )
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

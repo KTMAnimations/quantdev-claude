@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Upload, FlaskConical, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { DistributionChart } from "@/components/charts/DistributionChart";
+import { toast } from "sonner";
+import { useStrategyStore, type Trade } from "@/lib/strategyStore";
+import {
+  buildEquityCurve,
+  buildReturnHistogram,
+  generateSampleTrades,
+  parseTradesCsv,
+} from "@/lib/trades";
 
 interface MonteCarloResult {
   summary: {
@@ -30,47 +38,78 @@ interface MonteCarloResult {
 }
 
 export default function TestPage() {
+  const storedTrades = useStrategyStore((s) => s.trades);
+  const setStoredTrades = useStrategyStore((s) => s.setTrades);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<MonteCarloResult | null>(null);
+  const [trades, setTrades] = useState<Trade[]>(
+    storedTrades.length > 0 ? storedTrades : generateSampleTrades()
+  );
+  const [nSimulations, setNSimulations] = useState(2000);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Mock data for equity curve
-  const equityData = Array.from({ length: 100 }, (_, i) => ({
-    date: `Day ${i + 1}`,
-    equity: 10000 * Math.pow(1.001 + Math.random() * 0.002, i) + (Math.random() - 0.5) * 500,
-    drawdown: Math.random() * 0.1,
-  }));
+  const equityData = buildEquityCurve(trades, 10_000);
+  const distributionData = buildReturnHistogram(trades, 20);
 
-  // Mock data for distribution
-  const distributionData = Array.from({ length: 20 }, (_, i) => ({
-    bin: `${(i - 10) * 0.5}%`,
-    count: Math.floor(Math.random() * 100 + 50 * Math.exp(-Math.pow((i - 10) / 5, 2))),
-  }));
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseTradesCsv(text);
+      if (parsed.length === 0) {
+        throw new Error(
+          "No trades found. Expected CSV columns: entry_time, exit_time, pnl, return_pct"
+        );
+      }
+
+      setTrades(parsed);
+      setStoredTrades(parsed);
+      setFileName(file.name);
+      setResult(null);
+      toast.success(`Loaded ${parsed.length} trades`);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to parse CSV");
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   const handleAnalyze = async () => {
+    if (trades.length === 0) {
+      toast.error("Load trades first");
+      return;
+    }
+
     setIsAnalyzing(true);
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    try {
+      const resp = await fetch("/api/monte-carlo/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trades, n_simulations: nSimulations }),
+      });
 
-    setResult({
-      summary: {
-        verdict: "MODERATE EDGE",
-        verdict_color: "yellow",
-        description: "Strategy shows promise but needs further validation.",
-        edge_score: 4,
-        key_metrics: {
-          probability_positive_expectancy: 0.87,
-          timing_p_value: 0.032,
-          risk_of_ruin: 0.08,
-          sharpe_95_ci: [0.42, 1.85],
-        },
-      },
-      bootstrap: {
-        sharpe_ratio: { mean: 1.12, std: 0.35 },
-        win_rate: { mean: 0.54, std: 0.05 },
-        expectancy: { mean: 0.0023, probability_positive: 0.87 },
-      },
-    });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.error || data?.detail || "Monte Carlo analysis failed");
+      }
 
-    setIsAnalyzing(false);
+      setResult(data as MonteCarloResult);
+      toast.success("Monte Carlo analysis complete");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Monte Carlo analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const getVerdictColor = (color: string) => {
@@ -113,24 +152,76 @@ export default function TestPage() {
                 <p className="text-text-muted text-sm">
                   Supported formats: CSV with columns (entry_time, exit_time, pnl, return_pct)
                 </p>
-                <Button variant="outline" className="mt-4">
-                  Choose File
-                </Button>
+                <div className="mt-4 flex items-center justify-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <Button variant="outline" onClick={handleChooseFile}>
+                    Choose File
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      const sample = generateSampleTrades();
+                      setTrades(sample);
+                      setStoredTrades(sample);
+                      setFileName(null);
+                      setResult(null);
+                      toast.success("Loaded sample trades");
+                    }}
+                  >
+                    Use Sample Data
+                  </Button>
+                </div>
+                <div className="mt-3 text-sm text-text-muted">
+                  {fileName ? (
+                    <span>
+                      Loaded <span className="text-text-primary">{fileName}</span> (
+                      {trades.length} trades)
+                    </span>
+                  ) : (
+                    <span>Using sample trades ({trades.length} trades)</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-text-muted">Simulations</span>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={50000}
+                    value={nSimulations}
+                    onChange={(e) => setNSimulations(Number(e.target.value) || 0)}
+                    className="w-32 bg-background-tertiary border-border-primary"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing || trades.length === 0 || nSimulations <= 0}
+                    className="bg-accent-gradient"
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <FlaskConical className="h-4 w-4 mr-2" />
+                    )}
+                    Run Monte Carlo Analysis
+                  </Button>
+                </div>
               </div>
 
               <div className="flex justify-end">
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="bg-accent-gradient"
-                >
-                  {isAnalyzing ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <FlaskConical className="h-4 w-4 mr-2" />
-                  )}
-                  Run Monte Carlo Analysis
-                </Button>
+                <div className="text-sm text-text-muted">
+                  Tip: run fewer simulations for faster iteration, then increase for final
+                  validation.
+                </div>
               </div>
             </CardContent>
           </Card>

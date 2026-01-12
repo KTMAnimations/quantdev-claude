@@ -5,14 +5,52 @@ import { Header } from "@/components/dashboard/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Settings2, TrendingUp, BarChart3 } from "lucide-react";
+import { toast } from "sonner";
+import { useStrategyStore } from "@/lib/strategyStore";
+import { generateSampleTrades } from "@/lib/trades";
+
+interface RegressionResult {
+  r_squared: number;
+  adjusted_r_squared: number;
+  factors: { name: string; coefficient: number; p_value: number; significance: string }[];
+  residuals_normality: boolean;
+  durbin_watson: number;
+}
 
 export default function OptimizePage() {
+  const trades = useStrategyStore((s) => s.trades);
+  const setTrades = useStrategyStore((s) => s.setTrades);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState<RegressionResult | null>(null);
 
   const handleAnalyze = async () => {
+    if (trades.length === 0) {
+      toast.error("Load trades first (Test → upload CSV)");
+      return;
+    }
+
     setIsAnalyzing(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsAnalyzing(false);
+    try {
+      const resp = await fetch("/api/regression/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trades, features: [] }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.error || data?.detail || "Regression analysis failed");
+      }
+
+      setResult(data as RegressionResult);
+      toast.success("Regression analysis complete");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Regression analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -61,7 +99,18 @@ export default function OptimizePage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const sample = generateSampleTrades();
+                    setTrades(sample);
+                    setResult(null);
+                    toast.success("Loaded sample trades");
+                  }}
+                >
+                  Use Sample Trades
+                </Button>
                 <Button
                   onClick={handleAnalyze}
                   disabled={isAnalyzing}
@@ -78,53 +127,88 @@ export default function OptimizePage() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-background-card border-border-primary">
-              <CardHeader>
-                <CardTitle className="text-lg">Top Positive Factors</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {["RSI Momentum", "Volume Spike", "Trend Alignment", "Volatility Expansion"].map(
-                    (factor, i) => (
-                      <div
-                        key={factor}
-                        className="flex items-center justify-between p-3 bg-background-tertiary rounded-lg"
-                      >
-                        <span className="text-text-primary">{factor}</span>
-                        <span className="text-success font-mono">
-                          +{(0.15 - i * 0.03).toFixed(2)}
-                        </span>
-                      </div>
-                    )
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+          {result && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="bg-background-card border-border-primary">
+                  <CardContent className="p-4">
+                    <div className="text-sm text-text-muted">R²</div>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {result.r_squared.toFixed(3)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-background-card border-border-primary">
+                  <CardContent className="p-4">
+                    <div className="text-sm text-text-muted">Adj. R²</div>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {result.adjusted_r_squared.toFixed(3)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-background-card border-border-primary">
+                  <CardContent className="p-4">
+                    <div className="text-sm text-text-muted">Durbin-Watson</div>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {result.durbin_watson.toFixed(2)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-background-card border-border-primary">
+                  <CardContent className="p-4">
+                    <div className="text-sm text-text-muted">Residuals Normal</div>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {result.residuals_normality ? "Yes" : "No"}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card className="bg-background-card border-border-primary">
-              <CardHeader>
-                <CardTitle className="text-lg">Top Negative Factors</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {["News Events", "Low Liquidity", "Counter-Trend", "High Correlation"].map(
-                    (factor, i) => (
-                      <div
-                        key={factor}
-                        className="flex items-center justify-between p-3 bg-background-tertiary rounded-lg"
-                      >
-                        <span className="text-text-primary">{factor}</span>
-                        <span className="text-error font-mono">
-                          -{(0.12 - i * 0.02).toFixed(2)}
-                        </span>
+              <Card className="bg-background-card border-border-primary">
+                <CardHeader>
+                  <CardTitle className="text-lg">Factor Coefficients</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {result.factors.length === 0 ? (
+                      <div className="text-sm text-text-muted">
+                        No factors returned (need more trades).
                       </div>
-                    )
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    ) : (
+                      result.factors.map((factor) => (
+                        <div
+                          key={factor.name}
+                          className="flex items-center justify-between p-3 bg-background-tertiary rounded-lg"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-text-primary">{factor.name}</span>
+                            {factor.significance && (
+                              <span className="text-xs text-text-muted font-mono">
+                                {factor.significance}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 font-mono text-sm">
+                            <span
+                              className={
+                                factor.coefficient >= 0 ? "text-success" : "text-error"
+                              }
+                            >
+                              {factor.coefficient >= 0 ? "+" : ""}
+                              {factor.coefficient.toFixed(4)}
+                            </span>
+                            <span className="text-text-muted">
+                              p={factor.p_value.toFixed(3)}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       </div>
     </div>

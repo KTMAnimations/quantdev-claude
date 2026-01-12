@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, TrendingUp, BarChart3, Zap } from "lucide-react";
+import { toast } from "sonner";
 
 interface EdgeResult {
   feature_name: string;
@@ -56,49 +57,45 @@ function StatItem({
 export function EdgeDiscoveryPanel() {
   const [featureDescription, setFeatureDescription] = useState("");
   const [symbol, setSymbol] = useState("SPY");
+  const [timeframe, setTimeframe] = useState("1D");
+  const [lookbackDays, setLookbackDays] = useState(252);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<EdgeResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
     if (!featureDescription.trim()) return;
 
     setIsAnalyzing(true);
-    // Simulate API call - in production this would call the backend
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    setError(null);
 
-    // Mock result for demo
-    setResult({
-      feature_name: featureDescription,
-      statistical_significance: {
-        correlation_1d: 0.0234,
-        ic_mean: 0.0156,
-        ic_ir: 0.42,
-        p_value: 0.032,
-        is_significant: true,
-        quantile_returns: {
-          Q1: { mean_return: -0.0012, sharpe: -0.32, count: 50 },
-          Q2: { mean_return: 0.0003, sharpe: 0.12, count: 50 },
-          Q3: { mean_return: 0.0008, sharpe: 0.28, count: 50 },
-          Q4: { mean_return: 0.0015, sharpe: 0.45, count: 50 },
-          Q5: { mean_return: 0.0028, sharpe: 0.68, count: 50 },
-          long_short_spread: 0.004,
-        },
-      },
-      ml_importance: {
-        cv_accuracy: 0.543,
-        has_predictive_power: true,
-        feature_importance: { feature: 0.35, lag_1: 0.25, lag_2: 0.2, volume: 0.2 },
-      },
-      confidence_intervals: {
-        mean_return: 0.0023,
-        ci_lower_95: 0.0008,
-        ci_upper_95: 0.0038,
-        probability_positive: 0.87,
-      },
-      recommendation: "MODERATE EDGE - Strategy shows promise but needs further validation.",
-    });
+    try {
+      const resp = await fetch("/api/ideation/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          description: featureDescription,
+          symbol,
+          timeframe,
+          lookback_days: lookbackDays,
+        }),
+      });
 
-    setIsAnalyzing(false);
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.error || data?.detail || "Edge analysis failed");
+      }
+
+      setResult(data as EdgeResult);
+      toast.success("Edge analysis complete");
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "Edge analysis failed";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -131,9 +128,21 @@ export function EdgeDiscoveryPanel() {
               onChange={(e) => setSymbol(e.target.value)}
               className="w-32 bg-background-tertiary border-border-primary"
             />
+            <Input
+              placeholder="Timeframe"
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="w-32 bg-background-tertiary border-border-primary"
+            />
+            <Input
+              placeholder="Lookback days"
+              value={lookbackDays.toString()}
+              onChange={(e) => setLookbackDays(Number(e.target.value) || 0)}
+              className="w-40 bg-background-tertiary border-border-primary"
+            />
             <Button
               onClick={handleAnalyze}
-              disabled={isAnalyzing || !featureDescription.trim()}
+              disabled={isAnalyzing || !featureDescription.trim() || lookbackDays <= 0}
               className="bg-accent-gradient"
             >
               {isAnalyzing ? (
@@ -146,6 +155,12 @@ export function EdgeDiscoveryPanel() {
           </div>
         </CardContent>
       </Card>
+
+      {error && (
+        <Card className="bg-error/10 border-error/30">
+          <CardContent className="p-4 text-error text-sm">{error}</CardContent>
+        </Card>
+      )}
 
       {/* Results Section */}
       {result && (
